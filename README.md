@@ -1,1 +1,32 @@
-# Web_scraper
+# SS.lv Car Search App
+
+A simple and user-friendly **Streamlit** web application that allows you to search for used cars on the Latvian classifieds website [SS.lv](https://www.ss.lv).
+
+The app scrapes current listings in real time, displays them in a clean layout and provides direct links to the original advertisements.
+
+## Features
+
+- Search cars by **make** (e.g., BMW, Audi, Volkswagen) and **model** (e.g., 320, A4, Golf)
+- Real-time web scraping of SS.lv listings
+- Catalog view with **cards** (3 columns on desktop, responsive on mobile)
+- Direct links to the original SS.lv advertisements
+- Clean, modern UI with loading spinners and status messages
+
+## TO DO
+- **Pagination** – 10 listings per page with easy navigation
+- Automatic image quality enhancement for clearer photos
+- Filters (year, mileage, price)
+
+
+## Requirements
+
+- Python 3.8 or higher
+- The following Python packages:
+  - `streamlit`
+  - `requests`
+  - `beautifulsoup4`
+
+
+## Installation
+
+Clone the repository (or download the files) or visit https://webscrapingcars.streamlit.app/
