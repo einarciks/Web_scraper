@@ -29,4 +29,4 @@ The app scrapes current listings in real time, displays them in a clean layout a
 
 ## Installation
 
-Clone the repository (or download the files) or visit https://webscrapingcars.streamlit.app/
+Clone the repository/download the files (to run the programme type streamlit run App.py in the terminal) or visit https://webscrapingcars.streamlit.app/ (if the website is active at that moment)
