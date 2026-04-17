@@ -7,6 +7,7 @@ The app scrapes current listings in real time, displays them in a clean layout a
 ## Features
 
 - Search cars by **make** (e.g., BMW, Audi, Volkswagen) and **model** (e.g., 320, A4, Golf)
+- Filter out cars by year, price, engine capacity and mileage
 - Real-time web scraping of SS.lv listings
 - Catalog view with **cards** (3 columns on desktop, responsive on mobile)
 - Direct links to the original SS.lv advertisements
@@ -15,7 +16,6 @@ The app scrapes current listings in real time, displays them in a clean layout a
 ## TO DO
 - **Pagination** – 10 listings per page with easy navigation
 - Automatic image quality enhancement for clearer photos
-- Filters (year, mileage, price)
 
 
 ## Requirements
