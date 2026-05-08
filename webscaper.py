@@ -1,7 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 @dataclass
 class CarDatabase:
     cars: list = field(default_factory=list)
@@ -44,20 +45,101 @@ class Apply_filters:
         return True
     
 
+def scrape_ad_details(link, headers):
+    try:
+        response = requests.get(link, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return {}
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        details = {}
+
+        field_map = {
+            "tdo_18": "year",
+            "tdo_15": "engine",
+            "tdo_16": "mileage",
+            "tdo_17": "color",
+            "tdo_32": "body_type",
+            "tdo_35": "gearbox",
+            "tdo_223": "inspection",
+            "tdo_8":  "price",
+        }
+
+        for td_id, field_name in field_map.items():
+            elem = soup.find("td", id=td_id)
+            if elem:
+                details[field_name] = elem.text.strip()
+
+        return details
+
+    except Exception as e:
+        print(f"Kļūda: {e}")
+        return {}
+
+
+def process_single_ad(ad, headers, filters_obj):
+    """Apstrādā vienu sludinājumu — paredzēts paralēlai izpildei"""
+    try:
+        ad_id = ad["id"].split("_")[-1]
+        if ad_id == "712":
+            return None
+
+        title_elem = ad.find("a", class_="am")
+        title = title_elem.text.strip() if title_elem else "Nezināms"
+        link = "https://www.ss.lv" + title_elem["href"] if title_elem else None
+        if not link:
+            return None
+
+        td_elements = ad.find_all("td", class_=["msga2-o", "msga2-r"])
+        year_fallback    = td_elements[0].text.strip() if len(td_elements) > 0 else "Nav"
+        engine_fallback  = td_elements[1].text.strip() if len(td_elements) > 1 else "Nav"
+        mileage_fallback = td_elements[2].text.strip().replace("tūkst.", "000") if len(td_elements) > 2 else "Nav"
+        price_fallback   = td_elements[3].text.strip() if len(td_elements) > 3 else "Nav"
+
+        img_elem = ad.find("img", class_="isfoto")
+        img_url = img_elem["src"] if img_elem else "Nav attēla"
+
+        details = scrape_ad_details(link, headers)
+
+        year    = details.get("year",    year_fallback)
+        engine  = details.get("engine",  engine_fallback)
+        mileage = details.get("mileage", mileage_fallback).replace(" ", "").replace(",", "")
+        price   = details.get("price",   price_fallback)
+
+        if not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage}):
+            return None
+
+        return {
+            "id":         ad_id,
+            "title":      title,
+            "year":       year,
+            "engine":     engine,
+            "mileage":    mileage,
+            "price":      price,
+            "link":       link,
+            "image":      img_url,
+            "color":      details.get("color", "Nav"),
+            "body_type":  details.get("body_type", "Nav"),
+            "gearbox":    details.get("gearbox", "Nav"),
+            "inspection": details.get("inspection", "Nav"),
+        }
+
+    except Exception as e:
+        print(f"Kļūda apstrādājot sludinājumu: {e}")
+        return None
+
+
 def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage):
     database = CarDatabase()
+    filters_obj = Apply_filters(Filters(min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage))
 
     base_url = f"https://www.ss.lv/lv/transport/cars/{marka}/{modelis}/sell/page{{}}.html"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    page = 1
-    processed_ids = set()
-
     response = requests.get(base_url.format(1), headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-
 
     last_page = 1
     pagination = soup.find("div", class_="td2")
@@ -66,72 +148,49 @@ def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, 
         page_numbers = [int(a.text) for a in page_links if a.text.isdigit()]
         last_page = max(page_numbers) if page_numbers else 1
 
-    print(f" Atrastas {last_page} lapas sludinājumu {marka.upper()} {modelis.upper()}!")
+    print(f"Atrastas {last_page} lapas — {marka.upper()} {modelis.upper()}")
 
+    processed_ids = set()
+    all_ads = []
 
-    while page <= last_page:
+    # 1. solis — savācam visus sludinājumus no visām lapām
+    for page in range(1, last_page + 1):
         url = base_url.format(page)
-        print(f"Apstrādājam lapu {page}/{last_page}: {url}")
+        print(f"Lapa {page}/{last_page}: {url}")
 
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            print("Lapa nav pieejama!")
             break
 
         soup = BeautifulSoup(response.text, 'html.parser')
         ads = soup.find_all("tr", id=lambda x: x and x.startswith("tr_"))
-
-        if not ads:  
-            print("Nav vairāk sludinājumu")
+        if not ads:
             break
 
         for ad in ads:
-            try:
-                ad_id = ad["id"].split("_")[-1]
-                if ad_id == "712":
-                    continue
-                elif ad_id in processed_ids:
-                    print(f" Sludinājums {ad_id} jau apstrādāts, izlaižam.")
-                    continue  
+            ad_id = ad["id"].split("_")[-1]
+            if ad_id not in processed_ids and ad_id != "712":
                 processed_ids.add(ad_id)
+                all_ads.append(ad)
 
-                title_elem = ad.find("a", class_="am")
-                title = title_elem.text.strip() + "..." if title_elem else "Nezināms"
-                link = "https://www.ss.lv" + title_elem["href"] if title_elem else "Nav"
+    print(f"Kopā {len(all_ads)} sludinājumi — sākam paralēlo apstrādi...")
 
-                td_elements = ad.find_all("td", class_=["msga2-o", "msga2-r"])
-                year = td_elements[0].text.strip() if len(td_elements) > 0 else "Nav"
-                engine = td_elements[1].text.strip() if len(td_elements) > 1 else "Nav"
-                mileage = td_elements[2].text.strip().replace("tūkst.", "000") if len(td_elements) > 2 else "Nav"
-                price = td_elements[3].text.strip() if len(td_elements) > 3 else "Nav"
+    # 2. solis — paralēli atverams katru sludinājumu
+    # max_workers=10 nozīmē 10 vienlaicīgi pieprasījumi
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            executor.submit(process_single_ad, ad, headers, filters_obj): ad
+            for ad in all_ads
+        }
 
-                img_elem = ad.find("img", class_="isfoto")
-                img_url = img_elem["src"] if img_elem else "Nav attēla"
-                
-                apply_filters = Apply_filters(Filters(min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage))
-                if not apply_filters.apply({
-                    "year": year,
-                    "price": price,
-                    "engine": engine,
-                    "mileage": mileage
-                }):
-                    continue
+        completed = 0
+        for future in as_completed(futures):
+            completed += 1
+            result = future.result()
+            if result:
+                database.add(result)
+            if completed % 10 == 0:
+                print(f"  Apstrādāti {completed}/{len(all_ads)}...")
 
-
-                database.add({
-                    "id": ad_id,
-                    "title": title,
-                    "year": year,
-                    "engine": engine,
-                    "mileage": mileage,
-                    "price": price,
-                    "link": link,
-                    "image": img_url
-                })
-
-            except Exception as e:
-                print(f" Kļūda apstrādājot sludinājumu: {e}")
-
-        page += 1  
-    
+    print(f"Pabeigts! Atrasti {len(database)} sludinājumi.")
     return database
