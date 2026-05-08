@@ -22,26 +22,41 @@ class Filters:
     max_cap: float = None
     min_mileage: int = None
     max_mileage: int = None
+    Gearbox: str = None
+    Body_type: str = None
+    Color: str = None
 class Apply_filters:
     def __init__(self, filters: Filters):
         self.filters = filters
     def apply(self, car):
-        if self.filters.min_year and int(car.get("year", 0)) < self.filters.min_year:
+        if self.filters.min_year and int(car.get("year", 0).split()[0]) < self.filters.min_year:
             return False
-        if self.filters.max_year and int(car.get("year", 0)) > self.filters.max_year:
+        if self.filters.max_year and int(car.get("year", 0).split()[0]) > self.filters.max_year:
             return False
-        if self.filters.min_price and int(car.get("price", 0).replace("€", "").replace(",", "")) < self.filters.min_price:
+        if self.filters.min_price and int(car.get("price", 0).split()[0].replace("€", "").replace(",", "")) < self.filters.min_price:
             return False
-        if self.filters.max_price and int(car.get("price", 0).replace("€", "").replace(",", "")) > self.filters.max_price:
+        if self.filters.max_price and int(car.get("price", 0).split()[0].replace("€", "").replace(",", "")) > self.filters.max_price:
             return False
-        if self.filters.min_cap and float(car.get("engine", "0").replace("D", "").replace(",", ".")) < self.filters.min_cap:
+        if self.filters.min_cap and float(car.get("engine", "0").split()[0].replace("D", "").replace(",", ".")) < self.filters.min_cap:
             return False
-        if self.filters.max_cap and float(car.get("engine", "0").replace("D", "").replace(",", ".")) > self.filters.max_cap:
+        if self.filters.max_cap and float(car.get("engine", "0").split()[0].replace("D", "").replace(",", ".")) > self.filters.max_cap:
             return False
-        if self.filters.min_mileage and int(car.get("mileage", 0).replace("tūkst.", "000").replace(" ", "").replace(".", "")) < self.filters.min_mileage:
+        if self.filters.min_mileage and int(car.get("mileage", 0).split()[0].replace(" ", "").replace(".", "")).replace("-", "") < self.filters.min_mileage:
             return False
-        if self.filters.max_mileage and int(car.get("mileage", 0).replace("tūkst.", "000").replace(" ", "").replace(".", "")) > self.filters.max_mileage:
+        if self.filters.max_mileage and int(car.get("mileage", 0).split()[0].replace(" ", "").replace(".", "")).replace("-", "") > self.filters.max_mileage:
             return False
+        if self.filters.Gearbox:
+            car_gearbox = car.get("gearbox", "Nav").split()[0]
+            if car_gearbox not in self.filters.Gearbox:
+                return False
+        if self.filters.Body_type:
+            car_body = car.get("body_type", "Nav")
+            if car_body not in self.filters.Body_type:
+                return False
+        if self.filters.Color:
+            car_color = car.get("color", "Nav")
+            if car_color not in self.filters.Color:
+                return False
         return True
     
 
@@ -70,6 +85,15 @@ def scrape_ad_details(link, headers):
             if elem:
                 details[field_name] = elem.text.strip()
 
+        images = []
+        photo_divs = soup.find_all("div", class_="pic_dv_thumbnail")
+        for div in photo_divs:
+            img = div.find("img", class_="pic_thumbnail")
+            if img and img.get("src"):
+                images.append(img["src"])
+        
+        details["images"] = images
+
         return details
 
     except Exception as e:
@@ -93,7 +117,7 @@ def process_single_ad(ad, headers, filters_obj):
         td_elements = ad.find_all("td", class_=["msga2-o", "msga2-r"])
         year_fallback    = td_elements[0].text.strip() if len(td_elements) > 0 else "Nav"
         engine_fallback  = td_elements[1].text.strip() if len(td_elements) > 1 else "Nav"
-        mileage_fallback = td_elements[2].text.strip().replace("tūkst.", "000") if len(td_elements) > 2 else "Nav"
+        mileage_fallback = td_elements[2].text.strip() if len(td_elements) > 2 else "Nav"
         price_fallback   = td_elements[3].text.strip() if len(td_elements) > 3 else "Nav"
 
         img_elem = ad.find("img", class_="isfoto")
@@ -103,10 +127,14 @@ def process_single_ad(ad, headers, filters_obj):
 
         year    = details.get("year",    year_fallback)
         engine  = details.get("engine",  engine_fallback)
-        mileage = details.get("mileage", mileage_fallback).replace(" ", "").replace(",", "")
+        mileage = details.get("mileage", mileage_fallback)
         price   = details.get("price",   price_fallback)
+        color   = details.get("color",   "Nav").split()[0]
+        body_type = details.get("body_type", "Nav")
+        gearbox = details.get("gearbox", "Nav").split()[0]
+        inspection = details.get("inspection", "Nav")
 
-        if not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage}):
+        if not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage, "color": color, "body_type": body_type, "gearbox": gearbox}):
             return None
 
         return {
@@ -118,10 +146,12 @@ def process_single_ad(ad, headers, filters_obj):
             "price":      price,
             "link":       link,
             "image":      img_url,
-            "color":      details.get("color", "Nav"),
-            "body_type":  details.get("body_type", "Nav"),
-            "gearbox":    details.get("gearbox", "Nav"),
-            "inspection": details.get("inspection", "Nav"),
+            "color":      color,
+            "body_type":  body_type,
+            "gearbox":    gearbox,
+            "inspection": inspection,
+            "image":  details.get("images", [img_url])[0] if details.get("images") else img_url,
+            "images": details.get("images", [img_url]),
         }
 
     except Exception as e:
@@ -129,11 +159,11 @@ def process_single_ad(ad, headers, filters_obj):
         return None
 
 
-def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage):
+def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color):
     database = CarDatabase()
-    filters_obj = Apply_filters(Filters(min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage))
+    filters_obj = Apply_filters(Filters(min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color))
 
-    base_url = f"https://www.ss.lv/lv/transport/cars/{marka}/{modelis}/sell/page{{}}.html"
+    base_url = f"https://www.ss.lv/en/transport/cars/{marka}/{modelis}/sell/page{{}}.html"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -176,7 +206,6 @@ def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, 
     print(f"Kopā {len(all_ads)} sludinājumi — sākam paralēlo apstrādi...")
 
     # 2. solis — paralēli atverams katru sludinājumu
-    # max_workers=10 nozīmē 10 vienlaicīgi pieprasījumi
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
             executor.submit(process_single_ad, ad, headers, filters_obj): ad
@@ -194,3 +223,4 @@ def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, 
 
     print(f"Pabeigts! Atrasti {len(database)} sludinājumi.")
     return database
+
