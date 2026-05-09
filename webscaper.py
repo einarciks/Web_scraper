@@ -41,9 +41,9 @@ class Apply_filters:
             return False
         if self.filters.max_cap and float(car.get("engine", "0").split()[0].replace("D", "").replace(",", ".")) > self.filters.max_cap:
             return False
-        if self.filters.min_mileage and int(car.get("mileage", 0).split()[0].replace(" ", "").replace(".", "")).replace("-", "") < self.filters.min_mileage:
+        if self.filters.min_mileage and int(car.get("mileage", 0).replace(" ", "").replace("-", "")) < self.filters.min_mileage:
             return False
-        if self.filters.max_mileage and int(car.get("mileage", 0).split()[0].replace(" ", "").replace(".", "")).replace("-", "") > self.filters.max_mileage:
+        if self.filters.max_mileage and int(car.get("mileage", 0).replace(" ", "").replace("-", "")) > self.filters.max_mileage:
             return False
         if self.filters.Gearbox:
             car_gearbox = car.get("gearbox", "Nav").split()[0]
@@ -131,7 +131,7 @@ def process_single_ad(ad, headers, filters_obj):
         price   = details.get("price",   price_fallback)
         color   = details.get("color",   "Nav").split()[0]
         body_type = details.get("body_type", "Nav")
-        gearbox = details.get("gearbox", "Nav").split()[0]
+        gearbox = details.get("gearbox", "Nav")
         inspection = details.get("inspection", "Nav")
 
         if not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage, "color": color, "body_type": body_type, "gearbox": gearbox}):
