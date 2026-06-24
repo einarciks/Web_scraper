@@ -1,5 +1,6 @@
 import streamlit as st
 from webscaper import get_cars
+from Options import BodyTypeOptions, CarMakes, CarModels
 
 def main():
     st.set_page_config(
@@ -11,7 +12,7 @@ def main():
     with st.form("car_search_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            marka = st.text_input("Car Make (e.g. BMW, Audi)", key="make_input")
+            marka = st.selectbox("Car Make (e.g. BMW, Audi)", list(CarMakes.keys()), key="make_input")
         with col2:
             modelis = st.text_input("Model (e.g. X5, A4)", key="model_input")
         
@@ -32,9 +33,9 @@ def main():
 
         col7, col8 = st.columns(2)
         with col7:
-            min_cap = st.selectbox("Minimum Engine Capacity", options=[0.0, 0.1, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.6, 6.8, 7.0, 7.3])
+            min_cap = st.selectbox("Minimum Engine Capacity", options=["", 0.0, 0.1, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.6, 6.8, 7.0, 7.3])
         with col8:
-            max_cap = st.selectbox("Maximum Engine Capacity", options=[0.0, 0.1, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.6, 6.8, 7.0, 7.3])
+            max_cap = st.selectbox("Maximum Engine Capacity", options=["", 0.0, 0.1, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.6, 6.8, 7.0, 7.3])
 
         col9, col10 = st.columns(2)
         with col9:
@@ -56,6 +57,7 @@ def main():
             database = get_cars(marka.strip().lower(), modelis.strip().lower(), min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color)
 
         st.info(f"Found {len(database)} cars for {marka.upper()} {modelis.upper()}")
+        
 
         if len(database) > 0:
             for car in database:
@@ -90,7 +92,6 @@ def main():
             st.session_state.clear()
             st.cache_data.clear()
             st.rerun()
-            
 
 
 
