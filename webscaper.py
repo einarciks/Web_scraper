@@ -6,6 +6,8 @@ import time
 @dataclass
 class CarDatabase:
     cars: list = field(default_factory=list)
+    seen_ids: set = field(default_factory=set)
+    is_complete: bool = True
     def add(self, data):
         self.cars.append(data)
     def __iter__(self):
@@ -88,8 +90,13 @@ def scrape_ad_details(link, headers):
         images = []
         photo_divs = soup.find_all("div", class_="pic_dv_thumbnail")
         for div in photo_divs:
+            photo_link = div.find("a", href=True)
             img = div.find("img", class_="pic_thumbnail")
-            if img and img.get("src"):
+            # SS.lv exposes an .800.jpg version through the gallery link and a
+            # low-resolution .t.jpg thumbnail through the image source.
+            if photo_link:
+                images.append(photo_link["href"])
+            elif img and img.get("src"):
                 images.append(img["src"])
         
         details["images"] = images
@@ -101,7 +108,7 @@ def scrape_ad_details(link, headers):
         return {}
 
 
-def process_single_ad(ad, headers, filters_obj):
+def process_single_ad(ad, headers, filters_obj=None):
     """Apstrādā vienu sludinājumu — paredzēts paralēlai izpildei"""
     try:
         ad_id = ad["id"].split("_")[-1]
@@ -129,12 +136,12 @@ def process_single_ad(ad, headers, filters_obj):
         engine  = details.get("engine",  engine_fallback)
         mileage = details.get("mileage", mileage_fallback)
         price   = details.get("price",   price_fallback)
-        color   = details.get("color",   "Nav").split()[0]
+        color   = details.get("color", "Nav").strip()
         body_type = details.get("body_type", "Nav")
         gearbox = details.get("gearbox", "Nav")
         inspection = details.get("inspection", "Nav")
 
-        if not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage, "color": color, "body_type": body_type, "gearbox": gearbox}):
+        if filters_obj and not filters_obj.apply({"year": year, "price": price, "engine": engine, "mileage": mileage, "color": color, "body_type": body_type, "gearbox": gearbox}):
             return None
 
         return {
@@ -159,16 +166,24 @@ def process_single_ad(ad, headers, filters_obj):
         return None
 
 
-def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color):
+def get_cars(marka, modelis):
     database = CarDatabase()
-    filters_obj = Apply_filters(Filters(min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color))
 
     base_url = f"https://www.ss.lv/en/transport/cars/{marka}/{modelis}/sell/page{{}}.html"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    response = requests.get(base_url.format(1), headers=headers)
+    try:
+        response = requests.get(base_url.format(1), headers=headers, timeout=10)
+    except requests.RequestException as error:
+        print(f"Kļūda ielādējot SS.lv sarakstu: {error}")
+        database.is_complete = False
+        return database
+    if response.status_code != 200:
+        print(f"Kļūda ielādējot SS.lv sarakstu: HTTP {response.status_code}")
+        database.is_complete = False
+        return database
     soup = BeautifulSoup(response.text, 'html.parser')
 
     last_page = 1
@@ -188,19 +203,28 @@ def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, 
         url = base_url.format(page)
         print(f"Lapa {page}/{last_page}: {url}")
 
-        response = requests.get(url, headers=headers)
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+        except requests.RequestException as error:
+            print(f"Kļūda ielādējot lapu {page}: {error}")
+            database.is_complete = False
+            break
         if response.status_code != 200:
+            database.is_complete = False
             break
 
         soup = BeautifulSoup(response.text, 'html.parser')
         ads = soup.find_all("tr", id=lambda x: x and x.startswith("tr_"))
         if not ads:
+            if page < last_page:
+                database.is_complete = False
             break
 
         for ad in ads:
             ad_id = ad["id"].split("_")[-1]
             if ad_id not in processed_ids and ad_id != "712":
                 processed_ids.add(ad_id)
+                database.seen_ids.add(ad_id)
                 all_ads.append(ad)
 
     print(f"Kopā {len(all_ads)} sludinājumi — sākam paralēlo apstrādi...")
@@ -208,7 +232,7 @@ def get_cars(marka, modelis, min_year, max_year, min_price, max_price, min_cap, 
     # 2. solis — paralēli atverams katru sludinājumu
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
-            executor.submit(process_single_ad, ad, headers, filters_obj): ad
+            executor.submit(process_single_ad, ad, headers): ad
             for ad in all_ads
         }
 

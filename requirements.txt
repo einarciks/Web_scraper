@@ -1,3 +1,4 @@
 streamlit
 requests
 bs4
+sqlite3

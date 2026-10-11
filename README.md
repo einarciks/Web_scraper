@@ -11,11 +11,10 @@ The app scrapes current listings in real time, displays them in a clean layout a
 - Real-time web scraping of SS.lv listings
 - Catalog view with **cards** (3 columns on desktop, responsive on mobile)
 - Direct links to the original SS.lv advertisements
-- Clean, modern UI with loading spinners and status messages
+- Clean, modern UI
 
 ## TO DO
 - **Pagination** – 10 listings per page with easy navigation
-- Automatic image quality enhancement for clearer photos
 
 
 ## Requirements
@@ -25,6 +24,7 @@ The app scrapes current listings in real time, displays them in a clean layout a
   - `streamlit`
   - `requests`
   - `beautifulsoup4`
+  - `sqlite3`
 
 
 ## Installation

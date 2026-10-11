@@ -1,6 +1,11 @@
 import streamlit as st
 from webscaper import get_cars
-from Options import BodyTypeOptions, CarMakes, CarModels
+from database import CarRepository
+from Options import BodyTypeOptions, CarMakes
+
+
+DISPLAY_BODY_TYPES = {database_value: ui_label for ui_label, database_value in BodyTypeOptions.items()}
+
 
 def main():
     st.set_page_config(
@@ -20,16 +25,16 @@ def main():
         
         col3, col4 = st.columns(2)
         with col3:
-            min_year = st.number_input("Minimum Year", min_value=1900, max_value=2026, value=None, step=1)
+            min_year = st.number_input("Year From", min_value=1900, max_value=2026, value=None, step=1)
         with col4:
-            max_year = st.number_input("Maximum Year", min_value=1900, max_value=2026, value=None, step=1)
+            max_year = st.number_input("Year To", min_value=1900, max_value=2026, value=None, step=1)
         
         col5, col6 = st.columns(2)
 
         with col5:
-            min_price = st.number_input("Minimum Price", min_value=0, value=None, step=100)
+            min_price = st.number_input("Price From", min_value=0, value=None, step=100)
         with col6:
-            max_price = st.number_input("Maximum Price", min_value=0, value=None, step=100)
+            max_price = st.number_input("Price To", min_value=0, value=None, step=100)
 
         col7, col8 = st.columns(2)
         with col7:
@@ -47,16 +52,34 @@ def main():
         with col11:
             gearbox = st.multiselect("Gearbox Type", options=["Automatic", "Manual"])
         with col12:
-            body_type = st.multiselect("Body Type", options=["Sedan", "Hatchback", "Jeep", "Coupe", "Cabriolet", "Universal", "Minibus", "Miniven", "Pickup"])
+            body_type = st.multiselect("Body Type", options=list(BodyTypeOptions.keys()))
         col13, _ = st.columns(2)
         with col13:
-            color = st.multiselect("Color", options=["Black", "White", "Grey", "Blue", "Red", "Green", "Yellow", "Brown", "Dark red", "Ligh blue", "Orange", "Purple", "Silver"])
-        submit = st.form_submit_button("Search listings")
-    if submit:
-        with st.spinner("Finding cars..."):
-            database = get_cars(marka.strip().lower(), modelis.strip().lower(), min_year, max_year, min_price, max_price, min_cap, max_cap, min_mileage, max_mileage, gearbox, body_type, color)
+            color = st.multiselect("Color", options=["Black", "White", "Grey", "Blue", "Red", "Green", "Yellow", "Brown", "Dark red", "Light blue", "Orange", "Purple", "Silver"])
+        submit = st.form_submit_button("Search", use_container_width=True)
 
-        st.info(f"Found {len(database)} cars for {marka.upper()} {modelis.upper()}")
+    filters = dict(
+        make=marka.strip().lower(), model=modelis.strip().lower(),
+        min_year=min_year, max_year=max_year, min_price=min_price, max_price=max_price,
+        min_cap=min_cap or None, max_cap=max_cap or None,
+        min_mileage=min_mileage, max_mileage=max_mileage, gearbox=gearbox,
+        body_type=[BodyTypeOptions[value] for value in body_type], color=color,
+    )
+
+    if submit:
+        with st.spinner("Searching..."):
+            scraped_cars = get_cars(marka.strip().lower(), modelis.strip().lower())
+            with CarRepository() as repository:
+                saved = repository.save_cars(scraped_cars, marka, modelis)
+                deleted = (
+                    repository.remove_missing_cars(marka, modelis, scraped_cars.seen_ids)
+                    if scraped_cars.is_complete else 0
+                )
+                database = repository.search(**filters)
+
+    if submit:
+
+        st.info(f"Found {len(database)} listings for: {marka.upper()} {modelis.upper()}")
         
 
         if len(database) > 0:
@@ -68,7 +91,7 @@ def main():
                         f"**Mileage:** {car.get('mileage', 'N/A')} | "
                         f"**Price:** {car.get('price', 'N/A')} | "
                         f" **Color:** {car.get('color', 'N/A')} | "
-                        f" **Body Type:** {car.get('body_type', 'N/A')} | "
+                        f" **Body Type:** {DISPLAY_BODY_TYPES.get(car.get('body_type'), car.get('body_type', 'N/A'))} | "
                         f" **Gearbox:** {car.get('gearbox', 'N/A')} | "
                         f" **Inspection:** {car.get('inspection', 'N/A')}")
                 
@@ -80,7 +103,7 @@ def main():
                     cols = st.columns(min(len(images), 5))
                     for i, img_url in enumerate(images[:5]):
                         if img_url.startswith("http"):
-                            cols[i].image(img_url, width=500)
+                            cols[i].image(img_url, width="stretch", clamp=True)
                 else:
                     st.caption("Image not available")
                 st.divider()
