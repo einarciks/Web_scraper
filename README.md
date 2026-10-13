@@ -24,7 +24,7 @@ The app scrapes current listings in real time, displays them in a clean layout a
   - `streamlit`
   - `requests`
   - `beautifulsoup4`
-  - `sqlite3`
+
 
 
 ## Installation
