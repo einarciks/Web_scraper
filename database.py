@@ -13,11 +13,17 @@ def _number(value, decimal=False):
     """Extract the first number from a value displayed by SS.lv."""
     if value is None:
         return None
-    text = str(value).replace("\u00a0", " ").replace(",", ".")
-    match = re.search(r"\d+(?:\.\d+)?", text.replace(" ", ""))
-    if not match:
-        return None
-    return float(match.group()) if decimal else int(float(match.group()))
+    text = str(value).replace("\u00a0", " ")
+    if not decimal:
+        # SS.lv uses "," and spaces as thousands separators, e.g. "4,550 \u20ac".
+        match = re.search(r"\d+", text.replace(",", "").replace(" ", ""))
+        return int(match.group()) if match else None
+    match = re.search(r"\d+(?:\.\d+)?", text.replace(",", ".").replace(" ", ""))
+    return float(match.group()) if match else None
+
+
+# SS.lv stores some colors with typos, so the UI label maps to the stored prefix.
+COLOR_PREFIXES = {"Light blue": "Ligh"}
 
 
 class CarRepository:
@@ -50,6 +56,23 @@ class CarRepository:
             """
         )
         self.connection.commit()
+        self._repair_numbers()
+
+    def _repair_numbers(self):
+        """Re-parse numeric columns of rows saved by an older, buggy parser."""
+        rows = self.connection.execute(
+            "SELECT listing_id, year_text, year, mileage_text, mileage, price_text, price FROM cars"
+        ).fetchall()
+        updates = []
+        for row in rows:
+            fixed = (_number(row["year_text"]), _number(row["mileage_text"]), _number(row["price_text"]))
+            if fixed != (row["year"], row["mileage"], row["price"]):
+                updates.append((*fixed, row["listing_id"]))
+        if updates:
+            self.connection.executemany(
+                "UPDATE cars SET year = ?, mileage = ?, price = ? WHERE listing_id = ?", updates
+            )
+            self.connection.commit()
 
     def save_cars(self, cars, make, model):
         """Insert new advertisements or refresh ones already in the database."""
@@ -120,13 +143,16 @@ class CarRepository:
         range_filter("price", min_price, max_price)
         range_filter("engine_capacity", min_cap, max_cap)
         range_filter("mileage", min_mileage, max_mileage)
-        for column, values in (("gearbox", gearbox), ("body_type", body_type)):
-            if values:
-                where.append(f"{column} IN ({','.join('?' for _ in values)})")
-                params.extend(values)
+        if body_type:
+            where.append(f"body_type IN ({','.join('?' for _ in body_type)})")
+            params.extend(body_type)
+        # Gearbox is stored as e.g. "Automatic 6 speed", so match by prefix.
+        if gearbox:
+            where.append("(" + " OR ".join("gearbox LIKE ? COLLATE NOCASE" for _ in gearbox) + ")")
+            params.extend(f"{value}%" for value in gearbox)
         if color:
             where.append("(" + " OR ".join("color LIKE ? COLLATE NOCASE" for _ in color) + ")")
-            params.extend(f"{value}%" for value in color)
+            params.extend(f"{COLOR_PREFIXES.get(value, value)}%" for value in color)
 
         query = "SELECT * FROM cars"
         if where:

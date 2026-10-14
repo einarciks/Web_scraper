@@ -117,6 +117,20 @@ def main():
         body_type=[BodyTypeOptions[value] for value in body_type], color=color,
     )
 
+    range_errors = [
+        f"{label} From is greater than {label} To"
+        for label, low, high in (
+            ("Year", min_year, max_year), ("Price", min_price, max_price),
+            ("Engine Capacity", filters["min_cap"], filters["max_cap"]),
+            ("Mileage", min_mileage, max_mileage),
+        )
+        if low is not None and high is not None and low > high
+    ]
+    if submit and range_errors:
+        for error in range_errors:
+            st.warning(error)
+        submit = False
+
     if submit:
         with st.spinner("Searching..."):
             scraped_cars = get_cars(marka.strip().lower(), modelis.strip().lower())
