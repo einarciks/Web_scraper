@@ -5,6 +5,44 @@ from Options import BodyTypeOptions, CarMakes
 
 
 DISPLAY_BODY_TYPES = {database_value: ui_label for ui_label, database_value in BodyTypeOptions.items()}
+PAGE_SIZE = 10
+
+
+def change_page(delta):
+    st.session_state["page"] += delta
+
+
+def render_pagination(total_pages, key):
+    if total_pages <= 1:
+        return
+    page = st.session_state["page"]
+    prev_col, info_col, next_col = st.columns([1, 2, 1])
+    prev_col.button("◀ Previous", key=f"prev_{key}", disabled=page == 0,
+                    on_click=change_page, args=(-1,), use_container_width=True)
+    info_col.markdown(f"<div style='text-align:center'>Page {page + 1} of {total_pages}</div>",
+                      unsafe_allow_html=True)
+    next_col.button("Next ▶", key=f"next_{key}", disabled=page >= total_pages - 1,
+                    on_click=change_page, args=(1,), use_container_width=True)
+
+
+def format_range(label, low, high):
+    if low is None and high is None:
+        return None
+    return f"**{label}:** {'' if low is None else low}–{'' if high is None else high}"
+
+
+def describe_filters(min_year, max_year, min_price, max_price, min_cap, max_cap,
+                     min_mileage, max_mileage, gearbox, body_type, color):
+    parts = [
+        format_range("Year", min_year, max_year),
+        format_range("Price", min_price, max_price),
+        format_range("Engine", min_cap or None, max_cap or None),
+        format_range("Mileage", min_mileage, max_mileage),
+        f"**Gearbox:** {', '.join(gearbox)}" if gearbox else None,
+        f"**Body Type:** {', '.join(body_type)}" if body_type else None,
+        f"**Color:** {', '.join(color)}" if color else None,
+    ]
+    return " · ".join(part for part in parts if part)
 
 
 def main():
@@ -12,6 +50,19 @@ def main():
             page_title="Car Search App",
             page_icon="🚗",
         )
+    st.markdown(
+        """
+        <style>
+        [data-testid="stImage"] img {
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            width: 100%;
+            border-radius: 4px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title("Car Search App – SS.lv meklētājs")
 
     with st.form("car_search_form", clear_on_submit=False):
@@ -76,14 +127,28 @@ def main():
                     if scraped_cars.is_complete else 0
                 )
                 database = repository.search(**filters)
+        st.session_state["results"] = database
+        st.session_state["search_title"] = f"{marka.upper()} {modelis.upper()}".strip()
+        st.session_state["search_filters"] = describe_filters(
+            min_year, max_year, min_price, max_price, min_cap, max_cap,
+            min_mileage, max_mileage, gearbox, body_type, color,
+        )
+        st.session_state["page"] = 0
 
-    if submit:
+    if "results" in st.session_state:
+        database = st.session_state["results"]
 
-        st.info(f"Found {len(database)} listings for: {marka.upper()} {modelis.upper()}")
-        
+        st.info(f"Found {len(database)} listings for: {st.session_state['search_title']}")
+        if st.session_state["search_filters"]:
+            st.caption(f"Filters: {st.session_state['search_filters']}")
 
         if len(database) > 0:
-            for car in database:
+            total_pages = (len(database) + PAGE_SIZE - 1) // PAGE_SIZE
+            st.session_state["page"] = min(st.session_state["page"], total_pages - 1)
+            start = st.session_state["page"] * PAGE_SIZE
+
+            render_pagination(total_pages, "top")
+            for car in database[start:start + PAGE_SIZE]:
                 st.subheader(car.get("title", "No Title"))
                 st.write(f"**id:** {car.get('id', 'N/A')} | "
                         f"**Year:** {car.get('year', 'N/A')} | "
@@ -107,6 +172,7 @@ def main():
                 else:
                     st.caption("Image not available")
                 st.divider()
+            render_pagination(total_pages, "bottom")
         else:
             st.info("No cars found with the given parameters.")
 
