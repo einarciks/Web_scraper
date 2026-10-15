@@ -132,8 +132,14 @@ def main():
         submit = False
 
     if submit:
+        progress_bar = st.progress(0.0, text="Loading SS.lv pages...")
+
+        def show_progress(stage, done, total):
+            label = "Loading SS.lv pages" if stage == "pages" else "Processing listings"
+            progress_bar.progress(done / total if total else 1.0, text=f"{label}: {done}/{total}")
+
         with st.spinner("Searching..."):
-            scraped_cars = get_cars(marka.strip().lower(), modelis.strip().lower())
+            scraped_cars = get_cars(marka.strip().lower(), modelis.strip().lower(), progress=show_progress)
             with CarRepository() as repository:
                 saved = repository.save_cars(scraped_cars, marka, modelis)
                 deleted = (
@@ -141,6 +147,7 @@ def main():
                     if scraped_cars.is_complete else 0
                 )
                 database = repository.search(**filters)
+        progress_bar.empty()
         st.session_state["results"] = database
         st.session_state["search_title"] = f"{marka.upper()} {modelis.upper()}".strip()
         st.session_state["search_filters"] = describe_filters(

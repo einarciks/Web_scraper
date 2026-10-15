@@ -13,9 +13,6 @@ The app scrapes current listings in real time, displays them in a clean layout a
 - Direct links to the original SS.lv advertisements
 - Clean, modern UI
 
-## TO DO
-- **Pagination** – 10 listings per page with easy navigation
-
 
 ## Requirements
 
